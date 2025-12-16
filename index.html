@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32-CAM Stream Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #222;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+        }
+        #stream-container {
+            position: relative;
+            max-width: 800px;
+            margin: 20px auto;
+            border: 2px solid #555;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        #camera-stream {
+            display: block;
+            width: 100%;
+            height: auto;
+            background-color: #000;
+        }
+        #status-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            color: #f00;
+            font-weight: bold;
+            pointer-events: none; /* Allows clicks to go through if needed */
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Live ESP32-CAM Stream</h1>
+    
+    <div id="stream-container">
+        <img id="camera-stream" src="" alt="Camera Stream" crossorigin="anonymous">
+        
+        <div id="status-overlay" style="opacity: 1;">
+            Connecting...
+        </div>
+    </div>
+    
+    <p>Camera IP: <span id="camera-ip"></span></p>
+
+    <script>
+        // *** 1. SET YOUR ESP32-CAM'S IP ADDRESS HERE ***
+        // You MUST find the IP address printed on your ESP32-CAM's Serial Monitor 
+        // after it connects to WiFi. Example: 192.168.1.100
+        const ESP32_CAM_IP = "10.18.87.88"; 
+        // **********************************************
+        
+        const streamURL = `http://${ESP32_CAM_IP}/stream`;
+        const streamImage = document.getElementById('camera-stream');
+        const statusOverlay = document.getElementById('status-overlay');
+        const cameraIPDisplay = document.getElementById('camera-ip');
+        
+        cameraIPDisplay.textContent = ESP32_CAM_IP;
+
+        function loadStream() {
+            // This attempts to load the MJPEG stream from the ESP32-CAM.
+            // If the ESP32-CAM is OFF, the browser will eventually time out and trigger the onerror.
+            
+            // Set the image source
+            streamImage.src = streamURL;
+            
+            // Wait for a short moment to see if the stream loads
+            // If the stream is active, the image element will continuously receive data.
+            // A simple way to check if it's "on" is to see if it loads successfully and 
+            // has received a non-zero width/height.
+
+            // The 'onload' and 'onerror' events on an <img> tag for an MJPEG stream 
+            // are tricky because it's a *continuous* stream. A reliable check is difficult.
+            
+            // We'll use a simple time-based check: if the image hasn't loaded after a few seconds,
+            // assume the server is off and display the "No signal" overlay.
+            
+            statusOverlay.style.opacity = 1; // Show "Connecting..." initially
+            statusOverlay.textContent = "Connecting...";
+
+            // Simple check: The browser should start receiving data within this time.
+            const timeoutDuration = 5000; // 5 seconds
+            
+            const timeoutId = setTimeout(() => {
+                // If this timeout fires, it means the stream didn't successfully establish 
+                // within the duration. Assume the ESP32-CAM is off or inaccessible.
+                
+                // Set the status to 'No Signal'
+                statusOverlay.textContent = "NO SIGNAL (Device Off or IP Mismatch)";
+                statusOverlay.style.opacity = 1;
+
+                // Stop the failed stream attempt
+                streamImage.src = ''; 
+                
+                // Try again after a longer interval
+                setTimeout(loadStream, 10000); // Wait 10 seconds before retrying
+                
+            }, timeoutDuration);
+            
+            // An event listener for the browser's internal load success.
+            // This is triggered when the image *first* starts successfully receiving data.
+            streamImage.onload = () => {
+                clearTimeout(timeoutId); // Clear the timeout since the stream is loading
+                
+                // Hide the overlay to show the stream
+                statusOverlay.style.opacity = 0;
+                statusOverlay.textContent = "STREAM ACTIVE"; // Hidden text
+                
+                // Remove the onload/onerror to prevent interference with continuous streaming
+                streamImage.onload = null;
+                streamImage.onerror = null;
+            };
+            
+            // Handle errors (e.g., DNS error, connection refused)
+            streamImage.onerror = () => {
+                clearTimeout(timeoutId);
+                statusOverlay.textContent = "NO SIGNAL (Connection Error)";
+                statusOverlay.style.opacity = 1;
+                
+                // Stop the failed stream attempt
+                streamImage.src = '';
+                
+                // Try again after a longer interval
+                setTimeout(loadStream, 10000); // Wait 10 seconds before retrying
+            };
+        }
+
+        // Start the process
+        loadStream();
+        
+    </script>
+
+</body>
+</html>
